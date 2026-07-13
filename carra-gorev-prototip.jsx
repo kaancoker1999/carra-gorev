@@ -743,16 +743,13 @@ function Login({ onLogin }) {
       </div>
       <div style={card(false)}>
         <label style={lbl}>Kullanıcı adı</label>
-        <input value={u} onChange={(e) => setU(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="tuluhan" style={inp} />
+        <input value={u} onChange={(e) => setU(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="" style={inp} />
         <label style={lbl}>Şifre</label>
         <input type="password" value={p} onChange={(e) => setP(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="••••••••" style={{ ...inp, marginBottom: err ? 8 : 16 }} />
         {err && <p style={{ color: "#B23A48", fontSize: 13, margin: "0 0 12px" }}>{err}</p>}
         <button onClick={submit} style={{ ...btn(T.accent, "#fff"), width: "100%", justifyContent: "center", padding: "10px 0" }}>Giriş yap</button>
       </div>
-      <p style={{ fontSize: 12, color: T.faint, textAlign: "center", margin: "14px 0 0", lineHeight: 1.7 }}>
-        Demo kullanıcıları: tuluhan · kaan · caglar · daniel · harika<br />Şifre (hepsi): carra2026
-      </p>
-    </div>
+</div>
   );
 }
 
