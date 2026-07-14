@@ -78,7 +78,11 @@ const STR = {
     loggedIn: (name, lang) => `${name} olarak giriş yapıldı · dil: ${lang} · veriler bu oturumda tutulur`,
     langLabel: "Türkçe", logout: "Çıkış",
     dragStep: "Sürükleyip taşı",
+    deleteTask: "Görevi sil", deleteSure: "Emin misin? Bu geri alınamaz.", yesDelete: "Evet, sil",
+    reqDelete: "Silinmesini talep et", reqSent: "Silme talebin oluşturana iletildi",
+    reqBanner: (names) => `${names} bu görevin silinmesini talep etti`,
     notifs: "Bildirimler", noNotifs: "Henüz bildirim yok",
+    n_deleteReq: (name) => `${name} bir görevin silinmesini talep etti`,
     n_assigned: (name) => `${name} sana bir görev atadı`,
     n_visibility: (name) => `${name} bir görevi seninle paylaştı`,
     n_step: (name) => `${name} sana bir adım atadı`,
@@ -132,7 +136,11 @@ const STR = {
     loggedIn: (name, lang) => `Signed in as ${name} · language: ${lang} · data is kept for this session`,
     langLabel: "English", logout: "Log out",
     dragStep: "Drag to reorder",
+    deleteTask: "Delete task", deleteSure: "Are you sure? This can't be undone.", yesDelete: "Yes, delete",
+    reqDelete: "Request deletion", reqSent: "Your deletion request was sent to the creator",
+    reqBanner: (names) => `${names} requested deletion of this task`,
     notifs: "Notifications", noNotifs: "No notifications yet",
+    n_deleteReq: (name) => `${name} requested a task deletion`,
     n_assigned: (name) => `${name} assigned you a task`,
     n_visibility: (name) => `${name} shared a task with you`,
     n_step: (name) => `${name} assigned you a step`,
@@ -271,6 +279,7 @@ function NotifBell({ me, L, tt, tasks, notifs, onOpenTask, onMarkRead }) {
   const label = (n) =>
     n.type === "assigned" ? L.n_assigned(USERS[n.from].name)
     : n.type === "visibility" ? L.n_visibility(USERS[n.from].name)
+    : n.type === "delete_req" ? L.n_deleteReq(USERS[n.from].name)
     : L.n_step(USERS[n.from].name);
   return (
     <div style={{ position: "relative" }}>
@@ -500,7 +509,8 @@ function CreateTask({ me, L, onCancel, onCreate }) {
 }
 
 /* ---------- görev detayı ---------- */
-function TaskDetail({ task, me, L, tt, onBack, onOpenStep, onToggleStep, onAddStep, onRemoveStep, onAssignStep, onReorderStep }) {
+function TaskDetail({ task, me, L, tt, onBack, onOpenStep, onToggleStep, onAddStep, onRemoveStep, onAssignStep, onReorderStep, onDeleteTask, onRequestDelete }) {
+  const [delAsk, setDelAsk] = useState(false);
   const [summary, setSummary] = useState("");
   const [sumBusy, setSumBusy] = useState(false);
   const [propose, setPropose] = useState(null);
@@ -679,6 +689,29 @@ function TaskDetail({ task, me, L, tt, onBack, onOpenStep, onToggleStep, onAddSt
           {propBusy ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />} {L.askStep}
         </button>
       )}
+
+      <div style={{ borderTop: `1px solid ${T.border}`, marginTop: 20, paddingTop: 14 }}>
+        {me === task.creator && (task.deleteReqs || []).length > 0 && (
+          <p style={{ fontSize: 13, color: "#B23A48", background: "#FBEAEA", padding: "8px 12px", borderRadius: 8, margin: "0 0 12px", display: "flex", alignItems: "center", gap: 7 }}>
+            <Trash2 size={14} /> {L.reqBanner((task.deleteReqs || []).map((u) => USERS[u].name).join(", "))}
+          </p>
+        )}
+        {me === task.creator ? (
+          delAsk ? (
+            <span style={{ display: "inline-flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13.5, color: T.muted }}>{L.deleteSure}</span>
+              <button onClick={onDeleteTask} style={{ ...btn("#D64545", "#fff"), padding: "6px 14px", fontSize: 13 }}>{L.yesDelete}</button>
+              <button onClick={() => setDelAsk(false)} style={{ ...btn("transparent", T.muted, true), padding: "6px 12px", fontSize: 13 }}>{L.cancel}</button>
+            </span>
+          ) : (
+            <button onClick={() => setDelAsk(true)} style={{ ...btn("transparent", "#D64545", true), fontSize: 13 }}><Trash2 size={15} /> {L.deleteTask}</button>
+          )
+        ) : (task.deleteReqs || []).includes(me) ? (
+          <span style={{ fontSize: 13, color: T.muted, display: "inline-flex", alignItems: "center", gap: 6 }}><Check size={14} color={T.green} /> {L.reqSent}</span>
+        ) : (
+          <button onClick={onRequestDelete} style={{ ...btn("transparent", "#D64545", true), fontSize: 13 }}><Trash2 size={15} /> {L.reqDelete}</button>
+        )}
+      </div>
     </div>
   );
 }
@@ -905,6 +938,17 @@ export default function App() {
     if (uid !== me) pushNotifs([{ to: uid, type: "step", from: me, taskId: tid }]);
   };
   const addMsg = (tid, sid, msg) => updateTask(tid, (t) => ({ ...t, steps: t.steps.map((s) => (s.id === sid ? { ...s, msgs: [...s.msgs, msg] } : s)) }));
+  const deleteTask = (tid) => {
+    setTasks((ts) => ts.filter((t) => t.id !== tid));
+    setNotifs((ns) => ns.filter((n) => n.taskId !== tid));
+    setView({ name: "list" });
+  };
+  const requestDelete = (tid) => {
+    const t = tasks.find((x) => x.id === tid);
+    if (!t || t.creator === me || (t.deleteReqs || []).includes(me)) return;
+    updateTask(tid, (x) => ({ ...x, deleteReqs: [...(x.deleteReqs || []), me] }));
+    pushNotifs([{ to: t.creator, type: "delete_req", from: me, taskId: tid }]);
+  };
   const reorderStep = (tid, sid, to) => updateTask(tid, (t) => {
     const from = t.steps.findIndex((s) => s.id === sid);
     if (from < 0 || to === from) return t;
@@ -965,7 +1009,9 @@ export default function App() {
             onAddStep={(title) => addStep(task.id, title, USERS[me].lang)}
             onRemoveStep={(sid) => removeStep(task.id, sid)}
             onAssignStep={(sid, uid) => assignStep(task.id, sid, uid)}
-            onReorderStep={(sid, to) => reorderStep(task.id, sid, to)} />
+            onReorderStep={(sid, to) => reorderStep(task.id, sid, to)}
+            onDeleteTask={() => deleteTask(task.id)}
+            onRequestDelete={() => requestDelete(task.id)} />
         )}
         {view.name === "step" && task && step && (
           <StepChat task={task} step={step} me={me} L={L} tt={tt}
