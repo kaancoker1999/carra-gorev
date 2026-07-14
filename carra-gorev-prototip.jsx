@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Plus, ArrowLeft, ArrowUp, Check, Circle, CheckCircle2, Loader2,
-  Lock, Users, Calendar, Sparkles, ChevronRight, MessageSquare, X,
+  Lock, Users, Calendar, Sparkles, ChevronRight, ChevronUp, ChevronDown, MessageSquare, X,
   Wand2, Languages, PencilLine, LogOut, Trash2, Bell,
 } from "lucide-react";
 
@@ -498,7 +498,7 @@ function CreateTask({ me, L, onCancel, onCreate }) {
 }
 
 /* ---------- görev detayı ---------- */
-function TaskDetail({ task, me, L, tt, onBack, onOpenStep, onToggleStep, onAddStep, onRemoveStep, onAssignStep }) {
+function TaskDetail({ task, me, L, tt, onBack, onOpenStep, onToggleStep, onAddStep, onRemoveStep, onAssignStep, onMoveStep }) {
   const [summary, setSummary] = useState("");
   const [sumBusy, setSumBusy] = useState(false);
   const [propose, setPropose] = useState(null);
@@ -607,6 +607,10 @@ function TaskDetail({ task, me, L, tt, onBack, onOpenStep, onToggleStep, onAddSt
                   </div>
                 )}
               </div>
+              <span style={{ display: "flex", flexDirection: "column", gap: 3, flexShrink: 0 }}>
+                <ChevronUp size={15} color={i === 0 ? T.border : T.faint} style={{ cursor: i === 0 ? "default" : "pointer" }} onClick={() => i > 0 && onMoveStep(s.id, -1)} />
+                <ChevronDown size={15} color={i === task.steps.length - 1 ? T.border : T.faint} style={{ cursor: i === task.steps.length - 1 ? "default" : "pointer" }} onClick={() => i < task.steps.length - 1 && onMoveStep(s.id, 1)} />
+              </span>
               <Trash2 size={16} color={T.faint} style={{ cursor: "pointer" }} onClick={() => onRemoveStep(s.id)} />
               <ChevronRight size={17} color={T.faint} style={{ cursor: "pointer" }} onClick={() => onOpenStep(s.id)} />
             </div>
@@ -857,6 +861,14 @@ export default function App() {
     if (uid !== me) pushNotifs([{ to: uid, type: "step", from: me, taskId: tid }]);
   };
   const addMsg = (tid, sid, msg) => updateTask(tid, (t) => ({ ...t, steps: t.steps.map((s) => (s.id === sid ? { ...s, msgs: [...s.msgs, msg] } : s)) }));
+  const moveStep = (tid, sid, dir) => updateTask(tid, (t) => {
+    const i = t.steps.findIndex((s) => s.id === sid);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= t.steps.length) return t;
+    const steps = [...t.steps];
+    [steps[i], steps[j]] = [steps[j], steps[i]];
+    return { ...t, steps };
+  });
 
   const fontStyle = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');*{box-sizing:border-box}input,textarea,button{font-family:inherit}.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}textarea,input::placeholder{color:${T.faint}}@media (max-width:640px){input,textarea,select{font-size:16px !important}}`;
 
@@ -908,7 +920,8 @@ export default function App() {
             onToggleStep={(sid) => toggleStep(task.id, sid)}
             onAddStep={(title) => addStep(task.id, title, USERS[me].lang)}
             onRemoveStep={(sid) => removeStep(task.id, sid)}
-            onAssignStep={(sid, uid) => assignStep(task.id, sid, uid)} />
+            onAssignStep={(sid, uid) => assignStep(task.id, sid, uid)}
+            onMoveStep={(sid, dir) => moveStep(task.id, sid, dir)} />
         )}
         {view.name === "step" && task && step && (
           <StepChat task={task} step={step} me={me} L={L} tt={tt}
