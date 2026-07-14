@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Plus, ArrowLeft, ArrowUp, Check, Circle, CheckCircle2, Loader2,
-  Lock, Users, Calendar, Sparkles, ChevronRight, ChevronUp, ChevronDown, MessageSquare, X,
+  Lock, Users, Calendar, Sparkles, ChevronRight, GripVertical, MessageSquare, X,
   Wand2, Languages, PencilLine, LogOut, Trash2, Bell,
 } from "lucide-react";
 
@@ -77,6 +77,7 @@ const STR = {
     wandTitle: "Yazmama yardım et", aiBtnTitle: "Sohbete AI mesajı at",
     loggedIn: (name, lang) => `${name} olarak giriş yapıldı · dil: ${lang} · veriler bu oturumda tutulur`,
     langLabel: "Türkçe", logout: "Çıkış",
+    dragStep: "Sürükleyip taşı",
     notifs: "Bildirimler", noNotifs: "Henüz bildirim yok",
     n_assigned: (name) => `${name} sana bir görev atadı`,
     n_visibility: (name) => `${name} bir görevi seninle paylaştı`,
@@ -130,6 +131,7 @@ const STR = {
     wandTitle: "Help me write", aiBtnTitle: "Post an AI message to the chat",
     loggedIn: (name, lang) => `Signed in as ${name} · language: ${lang} · data is kept for this session`,
     langLabel: "English", logout: "Log out",
+    dragStep: "Drag to reorder",
     notifs: "Notifications", noNotifs: "No notifications yet",
     n_assigned: (name) => `${name} assigned you a task`,
     n_visibility: (name) => `${name} shared a task with you`,
@@ -498,13 +500,44 @@ function CreateTask({ me, L, onCancel, onCreate }) {
 }
 
 /* ---------- görev detayı ---------- */
-function TaskDetail({ task, me, L, tt, onBack, onOpenStep, onToggleStep, onAddStep, onRemoveStep, onAssignStep, onMoveStep }) {
+function TaskDetail({ task, me, L, tt, onBack, onOpenStep, onToggleStep, onAddStep, onRemoveStep, onAssignStep, onReorderStep }) {
   const [summary, setSummary] = useState("");
   const [sumBusy, setSumBusy] = useState(false);
   const [propose, setPropose] = useState(null);
   const [propBusy, setPropBusy] = useState(false);
   const [newStep, setNewStep] = useState("");
   const [pickFor, setPickFor] = useState(null);
+  const [drag, setDrag] = useState(null);
+  const rowsRef = useRef({});
+  const dragInfo = useRef(null);
+
+  const startDrag = (e, sid, index) => {
+    const rects = task.steps.map((st) => rowsRef.current[st.id].getBoundingClientRect());
+    dragInfo.current = { startY: e.clientY, centers: rects.map((r) => r.top + r.height / 2), h: rects[index].height + 6 };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    setDrag({ sid, index, over: index, delta: 0 });
+  };
+  const moveDrag = (e) => {
+    if (!drag || !dragInfo.current) return;
+    const { startY, centers } = dragInfo.current;
+    const delta = e.clientY - startY;
+    const dragCenter = centers[drag.index] + delta;
+    let over = 0;
+    centers.forEach((c, k) => { if (k !== drag.index && dragCenter > c) over++; });
+    setDrag((d) => (d ? { ...d, delta, over } : d));
+  };
+  const endDrag = () => {
+    if (!drag) return;
+    if (drag.over !== drag.index) onReorderStep(drag.sid, drag.over);
+    setDrag(null);
+    dragInfo.current = null;
+  };
+  const rowShift = (i) => {
+    if (!drag || i === drag.index || !dragInfo.current) return 0;
+    if (drag.index < i && i <= drag.over) return -dragInfo.current.h;
+    if (drag.over <= i && i < drag.index) return dragInfo.current.h;
+    return 0;
+  };
   const myLang = USERS[me].lang;
   const active = task.steps.find((s) => !s.done);
   const addManual = () => { if (newStep.trim()) { onAddStep(newStep.trim()); setNewStep(""); } };
@@ -571,12 +604,24 @@ function TaskDetail({ task, me, L, tt, onBack, onOpenStep, onToggleStep, onAddSt
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {task.steps.map((s, i) => {
           const isActive = active && s.id === active.id;
+          const isDragged = drag && drag.sid === s.id;
           return (
-            <div key={s.id} style={{
-              display: "flex", alignItems: "center", gap: 12, padding: "11px 12px", borderRadius: 8,
-              border: isActive ? `1px solid ${T.accentBorder}` : "1px solid transparent",
-              background: isActive ? T.accentBg : "transparent",
+            <div key={s.id} ref={(el) => { if (el) rowsRef.current[s.id] = el; }} style={{
+              display: "flex", alignItems: "center", gap: 10, padding: "11px 12px", borderRadius: 8,
+              border: isActive ? `1px solid ${T.accentBorder}` : `1px solid ${isDragged ? T.border : "transparent"}`,
+              background: isDragged ? T.surface : isActive ? T.accentBg : "transparent",
+              transform: isDragged ? `translateY(${drag.delta}px)` : `translateY(${rowShift(i)}px)`,
+              transition: isDragged ? "none" : "transform .15s",
+              boxShadow: isDragged ? "0 8px 24px rgba(24,34,52,.16)" : "none",
+              position: "relative", zIndex: isDragged ? 5 : "auto", userSelect: drag ? "none" : "auto",
             }}>
+              <span
+                onPointerDown={(e) => startDrag(e, s.id, i)} onPointerMove={moveDrag}
+                onPointerUp={endDrag} onPointerCancel={endDrag}
+                title={L.dragStep}
+                style={{ display: "flex", color: T.faint, cursor: isDragged ? "grabbing" : "grab", touchAction: "none", flexShrink: 0, margin: "0 -4px 0 -6px", padding: "6px 2px", WebkitUserSelect: "none", userSelect: "none" }}>
+                <GripVertical size={16} />
+              </span>
               <span onClick={() => onToggleStep(s.id)} style={{ cursor: "pointer", display: "flex" }}>
                 {s.done ? <CheckCircle2 size={20} color={T.green} /> : <Circle size={20} color={isActive ? T.accent : T.faint} />}
               </span>
@@ -607,10 +652,6 @@ function TaskDetail({ task, me, L, tt, onBack, onOpenStep, onToggleStep, onAddSt
                   </div>
                 )}
               </div>
-              <span style={{ display: "flex", flexDirection: "column", gap: 3, flexShrink: 0 }}>
-                <ChevronUp size={15} color={i === 0 ? T.border : T.faint} style={{ cursor: i === 0 ? "default" : "pointer" }} onClick={() => i > 0 && onMoveStep(s.id, -1)} />
-                <ChevronDown size={15} color={i === task.steps.length - 1 ? T.border : T.faint} style={{ cursor: i === task.steps.length - 1 ? "default" : "pointer" }} onClick={() => i < task.steps.length - 1 && onMoveStep(s.id, 1)} />
-              </span>
               <Trash2 size={16} color={T.faint} style={{ cursor: "pointer" }} onClick={() => onRemoveStep(s.id)} />
               <ChevronRight size={17} color={T.faint} style={{ cursor: "pointer" }} onClick={() => onOpenStep(s.id)} />
             </div>
@@ -861,12 +902,12 @@ export default function App() {
     if (uid !== me) pushNotifs([{ to: uid, type: "step", from: me, taskId: tid }]);
   };
   const addMsg = (tid, sid, msg) => updateTask(tid, (t) => ({ ...t, steps: t.steps.map((s) => (s.id === sid ? { ...s, msgs: [...s.msgs, msg] } : s)) }));
-  const moveStep = (tid, sid, dir) => updateTask(tid, (t) => {
-    const i = t.steps.findIndex((s) => s.id === sid);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= t.steps.length) return t;
+  const reorderStep = (tid, sid, to) => updateTask(tid, (t) => {
+    const from = t.steps.findIndex((s) => s.id === sid);
+    if (from < 0 || to === from) return t;
     const steps = [...t.steps];
-    [steps[i], steps[j]] = [steps[j], steps[i]];
+    const [moved] = steps.splice(from, 1);
+    steps.splice(Math.max(0, Math.min(to, steps.length)), 0, moved);
     return { ...t, steps };
   });
 
@@ -921,7 +962,7 @@ export default function App() {
             onAddStep={(title) => addStep(task.id, title, USERS[me].lang)}
             onRemoveStep={(sid) => removeStep(task.id, sid)}
             onAssignStep={(sid, uid) => assignStep(task.id, sid, uid)}
-            onMoveStep={(sid, dir) => moveStep(task.id, sid, dir)} />
+            onReorderStep={(sid, to) => reorderStep(task.id, sid, to)} />
         )}
         {view.name === "step" && task && step && (
           <StepChat task={task} step={step} me={me} L={L} tt={tt}
