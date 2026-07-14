@@ -513,29 +513,32 @@ function TaskDetail({ task, me, L, tt, onBack, onOpenStep, onToggleStep, onAddSt
 
   const startDrag = (e, sid, index) => {
     const rects = task.steps.map((st) => rowsRef.current[st.id].getBoundingClientRect());
-    dragInfo.current = { startY: e.clientY, centers: rects.map((r) => r.top + r.height / 2), h: rects[index].height + 6 };
+    const h = rects[index].height + 6;
+    dragInfo.current = { sid, index, over: index, startY: e.clientY, centers: rects.map((r) => r.top + r.height / 2), h };
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-    setDrag({ sid, index, over: index, delta: 0 });
+    setDrag({ sid, index, over: index, delta: 0, h });
   };
   const moveDrag = (e) => {
-    if (!drag || !dragInfo.current) return;
-    const { startY, centers } = dragInfo.current;
-    const delta = e.clientY - startY;
-    const dragCenter = centers[drag.index] + delta;
+    const d = dragInfo.current;
+    if (!d) return;
+    const delta = e.clientY - d.startY;
+    const dragCenter = d.centers[d.index] + delta;
     let over = 0;
-    centers.forEach((c, k) => { if (k !== drag.index && dragCenter > c) over++; });
-    setDrag((d) => (d ? { ...d, delta, over } : d));
+    d.centers.forEach((c, k) => { if (k !== d.index && dragCenter > c) over++; });
+    d.over = over;
+    setDrag({ sid: d.sid, index: d.index, over, delta, h: d.h });
   };
   const endDrag = () => {
-    if (!drag) return;
-    if (drag.over !== drag.index) onReorderStep(drag.sid, drag.over);
-    setDrag(null);
+    const d = dragInfo.current;
+    if (!d) return;
+    if (d.over !== d.index) onReorderStep(d.sid, d.over);
     dragInfo.current = null;
+    setDrag(null);
   };
   const rowShift = (i) => {
-    if (!drag || i === drag.index || !dragInfo.current) return 0;
-    if (drag.index < i && i <= drag.over) return -dragInfo.current.h;
-    if (drag.over <= i && i < drag.index) return dragInfo.current.h;
+    if (!drag || i === drag.index) return 0;
+    if (drag.index < i && i <= drag.over) return -drag.h;
+    if (drag.over <= i && i < drag.index) return drag.h;
     return 0;
   };
   const myLang = USERS[me].lang;
@@ -617,7 +620,7 @@ function TaskDetail({ task, me, L, tt, onBack, onOpenStep, onToggleStep, onAddSt
             }}>
               <span
                 onPointerDown={(e) => startDrag(e, s.id, i)} onPointerMove={moveDrag}
-                onPointerUp={endDrag} onPointerCancel={endDrag}
+                onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
                 title={L.dragStep}
                 style={{ display: "flex", color: T.faint, cursor: isDragged ? "grabbing" : "grab", touchAction: "none", flexShrink: 0, margin: "0 -4px 0 -6px", padding: "6px 2px", WebkitUserSelect: "none", userSelect: "none" }}>
                 <GripVertical size={16} />
