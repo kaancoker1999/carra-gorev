@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   Plus, ArrowLeft, ArrowUp, Check, Circle, CheckCircle2, Loader2,
   Lock, Users, Calendar, Sparkles, ChevronRight, MessageSquare, X,
-  Wand2, Languages, PencilLine, LogOut, Trash2,
+  Wand2, Languages, PencilLine, LogOut, Trash2, Bell,
 } from "lucide-react";
 
 /* ---------- tasarım belirteçleri ---------- */
@@ -77,6 +77,10 @@ const STR = {
     wandTitle: "Yazmama yardım et", aiBtnTitle: "Sohbete AI mesajı at",
     loggedIn: (name, lang) => `${name} olarak giriş yapıldı · dil: ${lang} · veriler bu oturumda tutulur`,
     langLabel: "Türkçe", logout: "Çıkış",
+    notifs: "Bildirimler", noNotifs: "Henüz bildirim yok",
+    n_assigned: (name) => `${name} sana bir görev atadı`,
+    n_visibility: (name) => `${name} bir görevi seninle paylaştı`,
+    n_step: (name) => `${name} sana bir adım atadı`,
   },
   en: {
     tasks: "Tasks",
@@ -126,6 +130,10 @@ const STR = {
     wandTitle: "Help me write", aiBtnTitle: "Post an AI message to the chat",
     loggedIn: (name, lang) => `Signed in as ${name} · language: ${lang} · data is kept for this session`,
     langLabel: "English", logout: "Log out",
+    notifs: "Notifications", noNotifs: "No notifications yet",
+    n_assigned: (name) => `${name} assigned you a task`,
+    n_visibility: (name) => `${name} shared a task with you`,
+    n_step: (name) => `${name} assigned you a step`,
   },
 };
 
@@ -250,6 +258,48 @@ function VisibilityText({ task, L }) {
     return (<span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Users size={14} /> {L.everyone}</span>);
   const names = task.visibility.map((u) => USERS[u].name).join(", ");
   return (<span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Lock size={14} /> {names}</span>);
+}
+
+/* ---------- bildirimler ---------- */
+function NotifBell({ me, L, tt, tasks, notifs, onOpenTask, onMarkRead }) {
+  const [open, setOpen] = useState(false);
+  const mine = notifs.filter((n) => n.to === me);
+  const unread = mine.filter((n) => !n.read).length;
+  const myLang = USERS[me].lang;
+  const label = (n) =>
+    n.type === "assigned" ? L.n_assigned(USERS[n.from].name)
+    : n.type === "visibility" ? L.n_visibility(USERS[n.from].name)
+    : L.n_step(USERS[n.from].name);
+  return (
+    <div style={{ position: "relative" }}>
+      <button onClick={() => setOpen((o) => !o)} title={L.notifs} style={{ position: "relative", width: 34, height: 34, borderRadius: "50%", border: `1px solid ${T.border}`, background: open ? T.accentBg : T.surface, color: T.muted, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+        <Bell size={17} />
+        {unread > 0 && (
+          <span style={{ position: "absolute", top: -4, right: -4, minWidth: 17, height: 17, borderRadius: 9, background: "#D64545", color: "#fff", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{unread}</span>
+        )}
+      </button>
+      {open && (
+        <div style={{ position: "absolute", right: 0, top: 40, zIndex: 20, width: 300, maxWidth: "calc(100vw - 32px)", background: T.surface, border: `1px solid ${T.border}`, borderRadius: 12, boxShadow: "0 8px 28px rgba(24,34,52,.14)", padding: 6, maxHeight: 340, overflowY: "auto" }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: T.muted, margin: "6px 8px" }}>{L.notifs}</p>
+          {mine.length === 0 && <p style={{ fontSize: 13, color: T.faint, margin: "4px 8px 10px" }}>{L.noNotifs}</p>}
+          {mine.map((n) => {
+            const task = tasks.find((t) => t.id === n.taskId);
+            return (
+              <button key={n.id} onClick={() => { onMarkRead(n.id); setOpen(false); if (task) onOpenTask(task.id); }} style={{ display: "flex", gap: 9, width: "100%", padding: 8, border: "none", background: n.read ? "transparent" : T.accentBg, borderRadius: 8, cursor: "pointer", textAlign: "left", marginBottom: 2 }}>
+                <Avatar uid={n.from} size={26} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 13, color: T.ink, lineHeight: 1.35 }}>{label(n)}</span>
+                  {task && <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: T.accent, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tt(task.title, task.lang)}</span>}
+                  <span style={{ display: "block", fontSize: 11, color: T.faint, marginTop: 1 }}>{fmtStamp(n.time, myLang)}</span>
+                </span>
+                {!n.read && <span style={{ width: 8, height: 8, borderRadius: 4, background: T.accent, flexShrink: 0, marginTop: 5 }} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ---------- görev listesi ---------- */
@@ -743,13 +793,13 @@ function Login({ onLogin }) {
       </div>
       <div style={card(false)}>
         <label style={lbl}>Kullanıcı adı</label>
-        <input value={u} onChange={(e) => setU(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="" style={inp} />
+        <input value={u} onChange={(e) => setU(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} style={inp} />
         <label style={lbl}>Şifre</label>
         <input type="password" value={p} onChange={(e) => setP(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} placeholder="••••••••" style={{ ...inp, marginBottom: err ? 8 : 16 }} />
         {err && <p style={{ color: "#B23A48", fontSize: 13, margin: "0 0 12px" }}>{err}</p>}
         <button onClick={submit} style={{ ...btn(T.accent, "#fff"), width: "100%", justifyContent: "center", padding: "10px 0" }}>Giriş yap</button>
       </div>
-</div>
+    </div>
   );
 }
 
@@ -758,6 +808,16 @@ export default function App() {
   const [tasks, setTasks] = useState(seed);
   const [me, setMe] = useState(null);
   const [view, setView] = useState({ name: "list" });
+  const [notifs, setNotifs] = useState([]);
+
+  const pushNotifs = (list) => { if (list.length) setNotifs((ns) => [...list.map((n, i) => ({ id: "n" + Date.now() + "_" + i, read: false, time: nowStamp(), ...n })), ...ns]); };
+  const notifyTask = (t) => {
+    const list = [];
+    t.assignees.forEach((u) => { if (u !== t.creator) list.push({ to: u, type: "assigned", from: t.creator, taskId: t.id }); });
+    if (Array.isArray(t.visibility)) t.visibility.forEach((u) => { if (u !== t.creator && !t.assignees.includes(u)) list.push({ to: u, type: "visibility", from: t.creator, taskId: t.id }); });
+    pushNotifs(list);
+  };
+  const markRead = (id) => setNotifs((ns) => ns.map((n) => (n.id === id ? { ...n, read: true } : n)));
 
   const task = useMemo(() => tasks.find((t) => t.id === view.taskId), [tasks, view.taskId]);
   const step = task && view.stepId ? task.steps.find((s) => s.id === view.stepId) : null;
@@ -792,10 +852,13 @@ export default function App() {
   const toggleStep = (tid, sid) => updateTask(tid, (t) => ({ ...t, steps: t.steps.map((s) => (s.id === sid ? { ...s, done: !s.done, completedAt: !s.done ? nowStamp() : null } : s)) }));
   const addStep = (tid, title, lang) => updateTask(tid, (t) => ({ ...t, steps: [...t.steps, { id: "s" + Date.now(), title, done: false, msgs: [], lang }] }));
   const removeStep = (tid, sid) => updateTask(tid, (t) => ({ ...t, steps: t.steps.filter((s) => s.id !== sid) }));
-  const assignStep = (tid, sid, uid) => updateTask(tid, (t) => ({ ...t, steps: t.steps.map((s) => (s.id === sid ? { ...s, assignee: uid } : s)) }));
+  const assignStep = (tid, sid, uid) => {
+    updateTask(tid, (t) => ({ ...t, steps: t.steps.map((s) => (s.id === sid ? { ...s, assignee: uid } : s)) }));
+    if (uid !== me) pushNotifs([{ to: uid, type: "step", from: me, taskId: tid }]);
+  };
   const addMsg = (tid, sid, msg) => updateTask(tid, (t) => ({ ...t, steps: t.steps.map((s) => (s.id === sid ? { ...s, msgs: [...s.msgs, msg] } : s)) }));
 
-  const fontStyle = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');*{box-sizing:border-box}input,textarea,button{font-family:inherit}.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}textarea,input::placeholder{color:${T.faint}}`;
+  const fontStyle = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');*{box-sizing:border-box}input,textarea,button{font-family:inherit}.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}textarea,input::placeholder{color:${T.faint}}@media (max-width:640px){input,textarea,select{font-size:16px !important}}`;
 
   if (!me)
     return (
@@ -821,6 +884,8 @@ export default function App() {
               <Avatar uid={me} size={26} />
               <span style={{ fontSize: 13, fontWeight: 500 }}>{USERS[me].name}</span>
             </span>
+            <NotifBell me={me} L={L} tt={tt} tasks={tasks} notifs={notifs}
+              onOpenTask={(id) => setView({ name: "detail", taskId: id })} onMarkRead={markRead} />
             <button onClick={() => { setMe(null); setView({ name: "list" }); }} style={{ ...btn("transparent", T.muted, true), padding: "6px 12px", fontSize: 13 }}><LogOut size={14} /> {L.logout}</button>
           </div>
         </div>
@@ -834,7 +899,7 @@ export default function App() {
         {view.name === "create" && (
           <CreateTask me={me} L={L}
             onCancel={() => setView({ name: "list" })}
-            onCreate={(t) => { setTasks((ts) => [t, ...ts]); setView({ name: "detail", taskId: t.id }); }} />
+            onCreate={(t) => { setTasks((ts) => [t, ...ts]); notifyTask(t); setView({ name: "detail", taskId: t.id }); }} />
         )}
         {view.name === "detail" && task && (
           <TaskDetail task={task} me={me} L={L} tt={tt}
